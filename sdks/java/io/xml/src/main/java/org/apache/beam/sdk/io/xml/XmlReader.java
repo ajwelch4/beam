@@ -17,89 +17,16 @@
  */
 package org.apache.beam.sdk.io.xml;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.SequenceInputStream;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.NoSuchElementException;
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBElement;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
-import javax.xml.stream.FactoryConfigurationError;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
-import org.apache.beam.sdk.coders.Coder;
-import org.apache.beam.sdk.io.FileBasedSource;
-import org.apache.beam.sdk.io.Source;
-import org.apache.beam.sdk.io.fs.MatchResult.Metadata;
-import org.apache.beam.sdk.options.PipelineOptions;
-import org.apache.beam.sdk.options.ValueProvider;
-import org.codehaus.stax2.XMLInputFactory2;
-
-/** Implementation of {@link XmlIO#read}. */
-@SuppressWarnings({
-  "nullness" // TODO(https://github.com/apache/beam/issues/20497)
-})
-public class XmlSource<T> extends FileBasedSource<T> {
-
-  private static final String XML_VERSION = "1.1";
-
-  private final XmlIO.MappingConfiguration<T> configuration;
-
-  XmlSource(
-      ValueProvider<String> spec,
-      XmlIO.MappingConfiguration<T> configuration,
-      long minBundleSizeBytes) {
-    super(spec, minBundleSizeBytes);
-    this.configuration = configuration;
-  }
-
-  private XmlSource(
-      XmlIO.MappingConfiguration<T> configuration,
-      long minBundleSizeBytes,
-      Metadata metadata,
-      long startOffset,
-      long endOffset) {
-    super(metadata, minBundleSizeBytes, startOffset, endOffset);
-    this.configuration = configuration;
-  }
-
-  @Override
-  protected FileBasedSource<T> createForSubrangeOfFile(Metadata metadata, long start, long end) {
-    return new XmlSource<>(configuration, getMinBundleSize(), metadata, start, end);
-  }
-
-  @Override
-  protected FileBasedReader<T> createSingleFileReader(PipelineOptions options) {
-    return new XMLReader<>(this);
-  }
-
-  @Override
-  public Coder<T> getOutputCoder() {
-    return JAXBCoder.of(configuration.getRecordClass());
-  }
-
-  /**
-   * A {@link Source.Reader} for reading JAXB annotated Java objects from an XML file. The XML file
-   * should be of the form defined at {@link XmlSource}.
-   *
-   * <p>Timestamped values are currently unsupported - all values implicitly have the timestamp of
-   * {@code BoundedWindow.TIMESTAMP_MIN_VALUE}.
-   *
-   * @param <T> Type of objects that will be read by the reader.
-   */
-  private static class XMLReader<T> extends FileBasedReader<T> {
+/**
+ * A {@link Source.Reader} for reading Java objects from an XML file. The XML file should be of the
+ * form defined at {@link XmlIO}.
+ *
+ * <p>Timestamped values are currently unsupported - all values implicitly have the timestamp of
+ * {@code BoundedWindow.TIMESTAMP_MIN_VALUE}.
+ *
+ * @param <T> Type of objects that will be read by the reader.
+ */
+class XMLReader<T> extends FileBasedReader<T> {
     // The amount of bytes read from the channel to memory when determining the starting offset of
     // the first record in a bundle. After matching to starting offset of the first record the
     // remaining bytes read to this buffer and the bytes still not read from the channel are used to
@@ -420,4 +347,3 @@ public class XmlSource<T> extends FileBasedSource<T> {
       return currentByteOffset;
     }
   }
-}

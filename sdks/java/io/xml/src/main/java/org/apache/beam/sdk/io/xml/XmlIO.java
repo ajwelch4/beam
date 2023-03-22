@@ -52,14 +52,14 @@ import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-/** Transforms for reading and writing XML files using JAXB mappers. */
+/** Transforms for reading and writing XML files. */
 @SuppressWarnings({
   "nullness" // TODO(https://github.com/apache/beam/issues/20497)
 })
 public class XmlIO {
   // CHECKSTYLE.OFF: JavadocStyle
   /**
-   * Reads XML files as a {@link PCollection} of a given type mapped via JAXB.
+   * Reads XML files as a {@link PCollection}.
    *
    * <p>The XML files must be of the following form, where {@code root} and {@code record} are XML
    * element names that are defined by the user:
@@ -81,12 +81,24 @@ public class XmlIO {
    * file.
    *
    * <p>Root and/or record elements may additionally contain an arbitrary number of XML attributes.
-   * Additionally users must provide a class of a JAXB annotated Java type that can be used convert
-   * records into Java objects and vice versa using JAXB marshalling/unmarshalling mechanisms.
-   * Reading the source will generate a {@code PCollection} of the given JAXB annotated Java type.
-   * Optionally users may provide a minimum size of a bundle that should be created for the source.
+   * If {@link Read#withRowOutput} is called, reading the source will generate a {@code PCollection}
+   * of {@link Row}s. If instead {@link Read#withRecordClass} is called, users must provide a class
+   * of a JAXB annotated Java type that can be used to convert records into Java objects and vice
+   * versa using JAXB marshalling/unmarshalling mechanisms and reading the source will generate a
+   * {@code PCollection} of the given JAXB annotated Java type. Optionally users may provide a
+   * minimum size of a bundle that should be created for the source.
    *
-   * <p>Example:
+   * <p>Example using {@link Read#withRowOutput}:
+   *
+   * <pre>{@code
+   * PCollection<Record> output = p.apply(XmlIO.<Record>read()
+   *     .from(file.toPath().toString())
+   *     .withRootElement("root")
+   *     .withRecordElement("record")
+   *     .withRowOutput());
+   * }</pre>
+   *
+   * <p>Example using {@link Read#withRecordClass}:
    *
    * <pre>{@code
    * PCollection<Record> output = p.apply(XmlIO.<Record>read()
@@ -164,6 +176,8 @@ public class XmlIO {
 
     abstract @Nullable Class<T> getRecordClass();
 
+    abstract @Nullable Boolean getUseBeamSchema();
+
     abstract @Nullable String getCharset();
 
     abstract @Nullable ValidationEventHandler getValidationEventHandler();
@@ -177,6 +191,8 @@ public class XmlIO {
       abstract Builder<T> setRecordElement(String recordElement);
 
       abstract Builder<T> setRecordClass(Class<T> recordClass);
+
+      abstract Builder<T> setUseBeamSchema(Boolean useBeamSchema);
 
       abstract Builder<T> setCharset(String charset);
 
@@ -197,6 +213,10 @@ public class XmlIO {
       return toBuilder().setRecordClass(recordClass).build();
     }
 
+    private MappingConfiguration<T> withRowOutput() {
+      return toBuilder().setUseBeamSchema(true).build();
+    }
+
     private MappingConfiguration<T> withCharset(Charset charset) {
       return toBuilder().setCharset(charset.name()).build();
     }
@@ -209,8 +229,9 @@ public class XmlIO {
     private void validate() {
       checkArgument(getRootElement() != null, "withRootElement() is required");
       checkArgument(getRecordElement() != null, "withRecordElement() is required");
-      checkArgument(getRecordClass() != null, "withRecordClass() is required");
-      checkArgument(getCharset() != null, "withCharset() is required");
+      checkArgument(getRecordClass() != null && getUseBeamSchema() != null, "withRecordClass() or withRowOutput() is required");
+      checkArgument(getRecordClass() == null && getUseBeamSchema() == null, "withRecordClass() and withRowOutput() are mutually exclusive");
+      checkArgument(getCharset() != null, "withCharset() is required" );
     }
 
     @Override
@@ -222,6 +243,8 @@ public class XmlIO {
               DisplayData.item("recordElement", getRecordElement()).withLabel("XML Record Element"))
           .addIfNotNull(
               DisplayData.item("recordClass", getRecordClass()).withLabel("XML Record Class"))
+          .addIfNotNull(
+              DisplayData.item("rowOutput", getUseBeamSchema()).withLabel("Output Beam Row"))
           .addIfNotNull(DisplayData.item("charset", getCharset()).withLabel("Charset"));
     }
   }
@@ -324,11 +347,18 @@ public class XmlIO {
 
     /**
      * Sets a JAXB annotated class that can be populated using a record of the provided XML file.
-     * This will be used when unmarshalling record objects from the XML file. This is a required
-     * parameter.
+     * This will be used when unmarshalling record objects from the XML file.
      */
     public Read<T> withRecordClass(Class<T> recordClass) {
       return withConfiguration(getConfiguration().withRecordClass(recordClass));
+    }
+
+    /**
+     * Sets {@link Row} as the class that can be populated using a record of the provided XML file.
+     * This will be used when unmarshalling record objects from the XML file.
+     */
+    public Read<T> withRowOutput() {
+      return withConfiguration(getConfiguration().withRowOutput());
     }
 
     /**
@@ -421,6 +451,11 @@ public class XmlIO {
     /** Like {@link Read#withRecordClass}. */
     public ReadFiles<T> withRecordClass(Class<T> recordClass) {
       return withConfiguration(getConfiguration().withRecordClass(recordClass));
+    }
+
+    /** Like {@link Read#withRowOutput}. */
+    public ReadFiles<T> withRowOutput() {
+      return withConfiguration(getConfiguration().withRowOutput());
     }
 
     /** Like {@link Read#withCharset}. */
